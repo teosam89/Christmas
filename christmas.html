@@ -1,354 +1,467 @@
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Visible Christmas Night</title>
-        <style>
-            body {
-                margin: 0;
-                overflow: hidden;
-                background-color: #050510;
-                font-family: 'Arial', sans-serif;
-            }
-            #canvas-container {
-                width: 100vw;
-                height: 100vh;
-                display: block;
-            }
-            #ui-layer {
-                position: absolute;
-                top: 20px;
-                width: 100%;
-                text-align: center;
-                pointer-events: none;
-                color: #fff;
-                z-index: 10;
-            }
-            h1 {
-                font-size: 3rem;
-                margin: 0;
-                letter-spacing: 1px;
-                text-shadow: 0 0 10px #ff9900, 0 0 20px #ff5500;
-                animation: glow 4s ease-in-out infinite alternate;
-            }
-            p {
-                font-size: 1.1rem;
-                opacity: 0.9;
-                margin-top: 10px;
-            }
-            @keyframes glow {
-                from { text-shadow: 0 0 10px #ff9900, 0 0 20px #ff5500; opacity: 0.9; }
-                to { text-shadow: 0 0 20px #ffcc00, 0 0 30px #ff8800; opacity: 1; }
-            }
-        </style>
-    </head>
-    <body>
-
-        <div id="ui-layer">
-            <h1>Christmas Night (Visible Ver.)</h1>
-            <p>Drag to Rotate · Scroll to Zoom</p>
-        </div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Christmas Night</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #050510; font-family: 'Arial', sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; display: block; }
         
-        <div id="canvas-container"></div>
+        /* UI 层样式调整 */
+        #ui-layer { position: absolute; top: 20px; width: 100%; text-align: center; pointer-events: none; color: #fff; z-index: 10; transition: opacity 1s; }
+        h1 { font-size: 3rem; margin: 0; letter-spacing: 1px; text-shadow: 0 0 10px #ff9900, 0 0 20px #ff5500; animation: glow 4s ease-in-out infinite alternate; }
+        p { font-size: 1.1rem; opacity: 0.9; margin-top: 10px; }
 
-        <script type="importmap">
-            {
-                "imports": {
-                    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-                }
+        /* 新增：开始遮罩层样式 */
+        #start-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(5, 5, 16, 0.85);
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
+            z-index: 100; transition: opacity 0.8s ease-out;
+            backdrop-filter: blur(5px);
+        }
+        #play-btn {
+            padding: 15px 40px;
+            font-size: 1.5rem;
+            color: #fff;
+            background: linear-gradient(45deg, #ff2222, #ffaa00);
+            border: none; border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(255, 68, 0, 0.5);
+            transition: transform 0.2s, box-shadow 0.2s;
+            pointer-events: auto; /* 确保按钮可点 */
+            font-family: 'Arial', sans-serif;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+        #play-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(255, 68, 0, 0.8);
+        }
+        #play-btn:active { transform: scale(0.95); }
+
+        /* 隐藏的类 */
+        .hidden { opacity: 0; pointer-events: none !important; }
+
+        @keyframes glow {
+            from { text-shadow: 0 0 10px #ff9900, 0 0 20px #ff5500; opacity: 0.9; }
+            to { text-shadow: 0 0 20px #ffcc00, 0 0 30px #ff8800; opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <audio id="bgm" src="Csong.mp3" loop></audio>
+
+    <div id="ui-layer">
+        <h1>Christmas Night</h1>
+        <p>Drag to Rotate · Scroll to Zoom</p>
+    </div>
+
+    <div id="start-overlay">
+        <h1>Merry Christmas</h1>
+        <div style="height: 30px;"></div>
+        <button id="play-btn">ENTER SCENE ♫</button>
+    </div>
+    
+    <div id="canvas-container"></div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
             }
-        </script>
+        }
+    </script>
 
-        <script type="module">
-            import * as THREE from 'three';
-            import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-            // --- 1. 场景初始化 ---
-            const scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x0a0a1a); //稍微提亮一点背景蓝
-            // 降低雾的浓度，让远处的极光更透亮
-            scene.fog = new THREE.FogExp2(0x0a0a1a, 0.005);
+        // --- 音乐播放逻辑 ---
+        const playBtn = document.getElementById('play-btn');
+        const overlay = document.getElementById('start-overlay');
+        const bgm = document.getElementById('bgm');
 
-            const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 15, 40);
-
-            const renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            
-            // --- 关键修改：曝光度调整 ---
-            renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 3.0; // 从 1.0 提升到 3.0，大幅提升整体亮度
-            
-            document.getElementById('canvas-container').appendChild(renderer.domElement);
-
-            const controls = new OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.05;
-            controls.maxPolarAngle = Math.PI / 2 - 0.05;
-            controls.minDistance = 10;
-            controls.maxDistance = 80;
-
-            // --- 2. 灯光系统 (全面优化) ---
-
-            // A. 半球光 (Hemisphere Light) - 新增
-            // 这是让物体可见的关键！天空是深蓝，地面是微弱的暖光，照亮所有阴影。
-            const hemiLight = new THREE.HemisphereLight(0x444488, 0x222233, 1.5);
-            scene.add(hemiLight);
-
-            // B. 月光 (Directional Light) - 增强
-            // 模拟明亮的满月，照亮物体的主轮廓
-            const moonLight = new THREE.DirectionalLight(0xddeeff, 1.2); 
-            moonLight.position.set(20, 50, -20);
-            moonLight.castShadow = true;
-            moonLight.shadow.mapSize.width = 2048;
-            moonLight.shadow.mapSize.height = 2048;
-            // 扩大阴影范围确保不被裁剪
-            moonLight.shadow.camera.left = -50;
-            moonLight.shadow.camera.right = 50;
-            moonLight.shadow.camera.top = 50;
-            moonLight.shadow.camera.bottom = -50;
-            scene.add(moonLight);
-
-            // C. 营火 (Point Light) - 氛围核心
-            // 保持暖色，照亮中心区域
-            const fireLight = new THREE.PointLight(0xffaa00, 10, 30);
-            fireLight.position.set(0, 2, 0);
-            fireLight.castShadow = true;
-            fireLight.shadow.bias = -0.0005;
-            fireLight.name = "fireLight"; 
-            fireLight.userData = { baseIntensity: 10 };
-            scene.add(fireLight);
-
-            // D. 树顶星星光
-            const starLight = new THREE.PointLight(0xffff00, 5, 15); // 稍微增强
-            starLight.position.set(0, 8.5, -12);
-            scene.add(starLight);
-
-
-            // --- 通用材质 (保持不变) ---
-            const redMat = new THREE.MeshStandardMaterial({ color: 0xff2222, roughness: 0.6 }); // 稍微提亮颜色本身
-            const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
-            const skinMat = new THREE.MeshStandardMaterial({ color: 0xffdecb, roughness: 0.5 });
-            const blackMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8 });
-            const goldMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.7, roughness: 0.3 });
-            const woodMat = new THREE.MeshStandardMaterial({ color: 0x6b4c35, roughness: 1.0, flatShading: true });
-            const darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x4a3225, roughness: 0.9, flatShading: true }); 
-            const elfGreenMat = new THREE.MeshStandardMaterial({ color: 0x44aa44, roughness: 0.7 }); // 提亮绿色
-            const turkeyMat = new THREE.MeshStandardMaterial({ color: 0xcd853f, roughness: 0.4, metalness: 0.1 });
-            const fireMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 1, blending: THREE.AdditiveBlending });
-
-            // --- 3. 对象创建函数 ---
-            
-            function createChristmasTree() {
-                const treeGroup = new THREE.Group();
-                const leafMaterial = new THREE.MeshStandardMaterial({ color: 0x1a6a1a, roughness: 0.7, flatShading: true }); // 稍微提亮树叶
-                for (let i = 0; i < 5; i++) {
-                    const size = 1 - (i * 0.15);
-                    const yPos = 1 + (i * 1.5);
-                    const cone = new THREE.Mesh(new THREE.ConeGeometry(3.5 * size, 3, 8), leafMaterial);
-                    cone.position.y = yPos; cone.castShadow = true; cone.receiveShadow = true;
-                    treeGroup.add(cone);
-                    const colors = [0xff0000, 0xffd700, 0x4466ff, 0xffffff];
-                    for (let j = 0; j < 6 + i; j++) {
-                        const angle = (j / (6+i)) * Math.PI * 2 + (i * 0.5);
-                        const x = Math.cos(angle) * (3.5 * size * 0.85);
-                        const z = Math.sin(angle) * (3.5 * size * 0.85);
-                        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.25), new THREE.MeshStandardMaterial({ color: colors[j%4], metalness:0.8, roughness:0.2 }));
-                        ball.position.set(x, yPos - 1.2, z); ball.castShadow = true;
-                        treeGroup.add(ball);
-                    }
-                }
-                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1, 2.5, 8), new THREE.MeshStandardMaterial({color:0x4a2e12}));
-                trunk.position.y = 0; trunk.castShadow = true; treeGroup.add(trunk);
-                const star = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 0), new THREE.MeshBasicMaterial({color:0xffff00}));
-                star.position.y = 8.5; treeGroup.add(star);
-                return treeGroup;
-            }
-
-            function createSnowman() {
-                const group = new THREE.Group();
-                const base = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), whiteMat); base.position.y = 1.3; base.castShadow = true; base.receiveShadow = true; group.add(base);
-                const mid = new THREE.Mesh(new THREE.SphereGeometry(1.1, 16, 16), whiteMat); mid.position.y = 3.2; mid.castShadow = true; mid.receiveShadow = true; group.add(mid);
-                const head = new THREE.Mesh(new THREE.SphereGeometry(0.8, 16, 16), whiteMat); head.position.y = 4.7; head.castShadow = true; head.receiveShadow = true; group.add(head);
-                group.add(new THREE.Mesh(new THREE.SphereGeometry(0.1), blackMat).position.set(-0.3, 4.9, 0.65));
-                group.add(new THREE.Mesh(new THREE.SphereGeometry(0.1), blackMat).position.set(0.3, 4.9, 0.65));
-                const nose = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.5, 8), new THREE.MeshStandardMaterial({color:0xff7700}));
-                nose.geometry.rotateX(Math.PI/2); nose.position.set(0, 4.7, 0.8); group.add(nose);
-                const armGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.6);
-                const lArm = new THREE.Mesh(armGeo, woodMat); lArm.position.set(-0.8, 3.4, 0); lArm.rotation.set(0, -0.2, Math.PI/4); group.add(lArm);
-                const rArm = new THREE.Mesh(armGeo, woodMat); rArm.position.set(0.8, 3.4, 0); rArm.rotation.set(0, 0.2, -Math.PI/4); group.add(rArm);
-                return group;
-            }
-
-            function createReindeer() {
-                const group = new THREE.Group();
-                const mat = new THREE.MeshStandardMaterial({color:0xa0522d, flatShading:true});
-                const body = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.2, 3), mat); body.position.y = 1.8; body.castShadow = true; group.add(body);
-                [[-0.6,-1,1.2],[0.6,-1,1.2],[-0.6,-1,-1.2],[0.6,-1,-1.2]].forEach(p=>{
-                    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.4,1.8,0.4), mat); leg.position.set(...p); leg.castShadow=true; body.add(leg);
-                });
-                const head = new THREE.Mesh(new THREE.BoxGeometry(1,1,1.5), mat); head.position.set(0,1.2,2); head.castShadow=true; body.add(head);
-                head.add(new THREE.Mesh(new THREE.SphereGeometry(0.15), new THREE.MeshBasicMaterial({color:0xff2222})).position.set(0,0,0.8));
-                return group;
-            }
-
-            function createAurora() {
-                const geo = new THREE.PlaneGeometry(200, 100, 64, 64); geo.rotateX(-Math.PI/2);
-                // 提高不透明度，确保能看见
-                const mat = new THREE.MeshBasicMaterial({color:0x00ffcc, transparent:true, opacity:0.4, blending:THREE.AdditiveBlending, side:THREE.DoubleSide, depthWrite:false});
-                const mesh = new THREE.Mesh(geo, mat); mesh.position.set(0, 30, -50); mesh.rotation.x = Math.PI/6;
-                mesh.userData.initialPositions = geo.attributes.position.array.slice();
-                return mesh;
-            }
-
-            function createCampfire() {
-                const group = new THREE.Group();
-                const logGeo = new THREE.CylinderGeometry(0.3, 0.3, 2.5, 6);
-                for(let i=0; i<5; i++) {
-                    const log = new THREE.Mesh(logGeo, woodMat);
-                    log.position.y = 0.2; log.rotation.x = Math.PI / 2; log.rotation.z = (i / 5) * Math.PI; log.castShadow = true; group.add(log);
-                }
-                const flameGeo = new THREE.ConeGeometry(0.8, 2, 8);
-                const flame1 = new THREE.Mesh(flameGeo, fireMat); flame1.position.y = 0.8; group.add(flame1);
-                const flame2 = new THREE.Mesh(flameGeo, fireMat); flame2.position.set(0.3, 0.6, 0); flame2.scale.set(0.7,0.7,0.7); group.add(flame2);
-                group.add(new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshBasicMaterial({color:0xffcc00})).position.set(0,0.4,0));
-                return group;
-            }
-
-            function createTurkey() {
-                const group = new THREE.Group();
-                const body = new THREE.Mesh(new THREE.SphereGeometry(0.8,16,12).scale(1.2,0.8,1), turkeyMat); body.castShadow=true; group.add(body);
-                const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.1,0.8), turkeyMat); leg.position.set(-0.7,0.1,0.3); leg.rotation.set(-Math.PI/6,0,Math.PI/3); leg.castShadow=true; group.add(leg);
-                const leg2 = leg.clone(); leg2.position.set(-0.7,0.1,-0.3); leg2.rotation.set(Math.PI/6,0,Math.PI/3); group.add(leg2);
-                group.add(new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.1,0.1,16), whiteMat).position.set(0,-0.45,0));
-                return group;
-            }
-
-            function createElf(colorMat) {
-                const group = new THREE.Group(); const s = 0.6;
-                const body = new THREE.Mesh(new THREE.SphereGeometry(1.4*s), colorMat); body.position.y=1.2*s; body.castShadow=true; group.add(body);
-                const head = new THREE.Mesh(new THREE.SphereGeometry(0.8*s), skinMat); head.position.y=2.5*s; head.castShadow=true; group.add(head);
-                const hat = new THREE.Mesh(new THREE.ConeGeometry(0.7*s,1.8*s), colorMat); hat.position.y=3.6*s; group.add(hat);
-                return group;
-            }
-
-            function createDiningSet() {
-                const group = new THREE.Group();
-                const table = new THREE.Mesh(new THREE.BoxGeometry(6, 0.2, 3), darkWoodMat); table.position.y=1; table.castShadow=true; table.receiveShadow=true; group.add(table);
-                const leg = new THREE.Mesh(new THREE.BoxGeometry(0.2,1,0.2), darkWoodMat);
-                [[-2.8,1.4],[2.8,1.4],[-2.8,-1.4],[2.8,-1.4]].forEach(p=>{
-                    const l=leg.clone(); l.position.set(p[0],0.5,p[1]); l.castShadow=true; group.add(l);
-                });
-                const chairPos = [{x:-1.5,z:-2.2,r:0},{x:0,z:-2.2,r:0},{x:1.5,z:-2.2,r:0},{x:-1.5,z:2.2,r:Math.PI},{x:0,z:2.2,r:Math.PI},{x:1.5,z:2.2,r:Math.PI}];
-                chairPos.forEach(p=>{
-                    const seat = new THREE.Mesh(new THREE.BoxGeometry(1,0.1,1), darkWoodMat); seat.position.set(p.x,0.8,p.z); seat.rotation.y=p.r; seat.castShadow=true; group.add(seat);
-                    const back = new THREE.Mesh(new THREE.BoxGeometry(1,1.2,0.1), darkWoodMat); back.position.set(0,0.6,-0.45); seat.add(back);
-                    const elf = createElf(Math.random()>0.5 ? elfGreenMat : redMat);
-                    elf.position.set(p.x, 0.85, p.z); elf.rotation.y = p.r + (Math.random()-0.5)*0.5;
-                    group.add(elf);
-                });
-                const turkey = createTurkey(); turkey.position.set(0,1.55,0); group.add(turkey);
-                return group;
-            }
-
-            function createSanta() {
-                const group = new THREE.Group();
-                const body = new THREE.Mesh(new THREE.SphereGeometry(1.8), redMat); body.position.y=2.2; body.castShadow=true; group.add(body);
-                const head = new THREE.Mesh(new THREE.SphereGeometry(0.9), skinMat); head.position.y=4.2; head.castShadow=true; group.add(head);
-                const hat = new THREE.Mesh(new THREE.ConeGeometry(0.8,1.5), redMat); hat.position.y=5.6; group.add(hat);
-                const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.35,1.2), redMat);
-                const lArm = arm.clone(); lArm.position.set(-1.6,2.8,0); lArm.rotation.z=Math.PI/3; group.add(lArm);
-                lArm.add(new THREE.Mesh(new THREE.SphereGeometry(0.4), whiteMat).position.set(0,-0.7,0));
-                const rArm = arm.clone(); rArm.position.set(1.6,2.8,0); rArm.rotation.z=-Math.PI/3; group.add(rArm);
-                rArm.add(new THREE.Mesh(new THREE.SphereGeometry(0.4), whiteMat).position.set(0,-0.7,0));
-                const beard = new THREE.Group(); 
-                beard.add(new THREE.Mesh(new THREE.SphereGeometry(0.4), whiteMat).position.set(0,3.7,0.8));
-                beard.add(new THREE.Mesh(new THREE.SphereGeometry(0.4), whiteMat).position.set(-0.4,3.8,0.7));
-                beard.add(new THREE.Mesh(new THREE.SphereGeometry(0.4), whiteMat).position.set(0.4,3.8,0.7));
-                group.add(beard);
-                return group;
-            }
-            
-            function createGifts() {
-                const grp = new THREE.Group();
-                const colors = [0xff2222, 0x22ff22, 0x2222ff, 0xffff22];
-                for(let i=0; i<10; i++) {
-                    const w = 0.8+Math.random();
-                    const box = new THREE.Mesh(new THREE.BoxGeometry(w,0.8,w), new THREE.MeshStandardMaterial({color:colors[i%4], roughness:0.5}));
-                    box.position.set((Math.random()-0.5)*10, 0.4, -10 + (Math.random()-0.5)*5);
-                    box.rotation.y = Math.random(); box.castShadow=true; grp.add(box);
-                }
-                return grp;
-            }
-
-            // --- 4. 场景组装 ---
-            const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200), new THREE.MeshStandardMaterial({color:0x151525, roughness:0.8}));
-            ground.rotation.x = -Math.PI/2; ground.position.y = -1.2; ground.receiveShadow = true;
-            scene.add(ground);
-
-            const campfire = createCampfire(); campfire.position.set(0,-1.2,0); scene.add(campfire);
-            const diningSet = createDiningSet(); diningSet.position.set(0,-1.2,6); scene.add(diningSet);
-            const tree = createChristmasTree(); tree.position.set(0,0,-12); scene.add(tree);
-            const santa = createSanta(); santa.position.set(5,-1.2,4); santa.rotation.y=-Math.PI/4; scene.add(santa);
-            const snowman = createSnowman(); snowman.position.set(-6,-1.2,2); snowman.rotation.y=Math.PI/3; scene.add(snowman);
-            const reindeer = createReindeer(); reindeer.position.set(8,-1.2,-5); reindeer.rotation.y=-Math.PI/1.5; scene.add(reindeer);
-            const gifts = createGifts(); scene.add(gifts);
-            const aurora = createAurora(); scene.add(aurora);
-
-            // 雪花
-            const snowGeo = new THREE.BufferGeometry();
-            const snowPos = new Float32Array(2000*3);
-            const snowVel = new Float32Array(2000);
-            for(let i=0; i<6000; i+=3) {
-                snowPos[i] = (Math.random()-0.5)*100; snowPos[i+1] = Math.random()*60; snowPos[i+2] = (Math.random()-0.5)*100;
-                snowVel[i/3] = Math.random()*0.06 + 0.03;
-            }
-            snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPos,3));
-            const snow = new THREE.Points(snowGeo, new THREE.PointsMaterial({size:0.2, color:0xffffff, transparent:true, opacity:0.9}));
-            scene.add(snow);
-
-            // --- 5. 动画 ---
-            let time = 0;
-            function animate() {
-                requestAnimationFrame(animate);
-                time += 0.01;
-                
-                // 火光摇曳
-                fireLight.intensity = fireLight.userData.baseIntensity + (Math.random()-0.5)*2;
-
-                santa.rotation.y = -Math.PI/4 + Math.sin(time*2)*0.05;
-                tree.rotation.y += 0.001;
-
-                const pos = aurora.geometry.attributes.position.array;
-                const init = aurora.userData.initialPositions;
-                for(let i=0; i<pos.length; i+=3) {
-                    pos[i+1] = init[i+1] + Math.sin(init[i]/10 + time)*5;
-                }
-                aurora.geometry.attributes.position.needsUpdate = true;
-
-                const sp = snow.geometry.attributes.position.array;
-                for(let i=1; i<6000; i+=3) {
-                    sp[i] -= snowVel[(i-1)/3];
-                    if(sp[i]<-1) sp[i]=50;
-                }
-                snow.geometry.attributes.position.needsUpdate = true;
-
-                controls.update();
-                renderer.render(scene, camera);
-            }
-
-            window.addEventListener('resize', () => {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
+        playBtn.addEventListener('click', () => {
+            // 用户点击后，播放音乐
+            bgm.play().then(() => {
+                console.log("Music playing");
+            }).catch(e => {
+                console.error("Audio play failed", e);
             });
+            
+            // 隐藏遮罩层
+            overlay.classList.add('hidden');
+            
+            // 稍后彻底移除遮罩层以防误触
+            setTimeout(() => {
+                overlay.style.display = 'none';
+            }, 1000);
+        });
 
-            animate();
-        </script>
-    </body>
-    </html>
+        // --- 1. 场景初始化 ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a1a);
+        scene.fog = new THREE.FogExp2(0x0a0a1a, 0.005);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 15, 40);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 3.0;
+        
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.05;
+        controls.minDistance = 10;
+        controls.maxDistance = 80;
+
+        // --- 2. 灯光系统 ---
+        const hemiLight = new THREE.HemisphereLight(0x444488, 0x222233, 1.5);
+        scene.add(hemiLight);
+
+        const moonLight = new THREE.DirectionalLight(0xddeeff, 1.2); 
+        moonLight.position.set(20, 50, -20);
+        moonLight.castShadow = true;
+        moonLight.shadow.mapSize.width = 2048;
+        moonLight.shadow.mapSize.height = 2048;
+        scene.add(moonLight);
+
+        const fireLight = new THREE.PointLight(0xffaa00, 10, 30);
+        fireLight.position.set(0, 2, 0);
+        fireLight.castShadow = true;
+        fireLight.shadow.bias = -0.0005;
+        fireLight.userData = { baseIntensity: 10 };
+        scene.add(fireLight);
+
+        const starLight = new THREE.PointLight(0xffff00, 5, 15);
+        starLight.position.set(0, 8.5, -12);
+        scene.add(starLight);
+
+
+        // --- 通用材质 ---
+        const redMat = new THREE.MeshStandardMaterial({ color: 0xe60000, roughness: 0.6 });
+        const whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
+        const skinMat = new THREE.MeshStandardMaterial({ color: 0xffdecb, roughness: 0.5 });
+        const blackMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+        const eyeMat = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.1, metalness: 0.5 });
+        const goldMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.7, roughness: 0.3 });
+        const woodMat = new THREE.MeshStandardMaterial({ color: 0x6b4c35, roughness: 1.0, flatShading: true });
+        const darkWoodMat = new THREE.MeshStandardMaterial({ color: 0x4a3225, roughness: 0.9, flatShading: true }); 
+        const antlerMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 1.0 });
+        const elfGreenMat = new THREE.MeshStandardMaterial({ color: 0x44aa44, roughness: 0.7 });
+        const turkeyMat = new THREE.MeshStandardMaterial({ color: 0xcd853f, roughness: 0.4, metalness: 0.1 });
+        const fireMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 1, blending: THREE.AdditiveBlending });
+        const ribbonMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.3 });
+
+        // --- 辅助函数：创建眼睛 ---
+        function createCuteEye(scale = 1) {
+            const eyeGroup = new THREE.Group();
+            const eyeball = new THREE.Mesh(new THREE.SphereGeometry(0.1 * scale, 16, 16), eyeMat);
+            eyeGroup.add(eyeball);
+            const highlight = new THREE.Mesh(new THREE.SphereGeometry(0.03 * scale, 8, 8), new THREE.MeshBasicMaterial({color: 0xffffff}));
+            highlight.position.set(0.03 * scale, 0.03 * scale, 0.08 * scale);
+            eyeGroup.add(highlight);
+            return eyeGroup;
+        }
+
+        // --- 3. 对象创建函数 ---
+        
+        function createChristmasTree() {
+            const treeGroup = new THREE.Group();
+            const leafMaterial = new THREE.MeshStandardMaterial({ color: 0x1a6a1a, roughness: 0.7, flatShading: true });
+            for (let i = 0; i < 5; i++) {
+                const size = 1 - (i * 0.15);
+                const yPos = 1 + (i * 1.5);
+                const cone = new THREE.Mesh(new THREE.ConeGeometry(3.5 * size, 3, 8), leafMaterial);
+                cone.position.y = yPos; cone.castShadow = true; cone.receiveShadow = true;
+                treeGroup.add(cone);
+                const colors = [0xff0000, 0xffd700, 0x4466ff, 0xffffff];
+                for (let j = 0; j < 6 + i; j++) {
+                    const angle = (j / (6+i)) * Math.PI * 2 + (i * 0.5);
+                    const x = Math.cos(angle) * (3.5 * size * 0.85);
+                    const z = Math.sin(angle) * (3.5 * size * 0.85);
+                    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.25), new THREE.MeshStandardMaterial({ color: colors[j%4], metalness:0.8, roughness:0.2 }));
+                    ball.position.set(x, yPos - 1.2, z); ball.castShadow = true;
+                    treeGroup.add(ball);
+                }
+            }
+            const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1, 2.5, 8), new THREE.MeshStandardMaterial({color:0x4a2e12}));
+            trunk.position.y = 0; trunk.castShadow = true; treeGroup.add(trunk);
+            const star = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 0), new THREE.MeshBasicMaterial({color:0xffff00}));
+            star.position.y = 8.5; treeGroup.add(star);
+            return treeGroup;
+        }
+
+        function createSnowman() {
+            const group = new THREE.Group();
+            const base = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), whiteMat); base.position.y = 1.3; base.castShadow = true; base.receiveShadow = true; group.add(base);
+            const mid = new THREE.Mesh(new THREE.SphereGeometry(1.1, 16, 16), whiteMat); mid.position.y = 3.2; mid.castShadow = true; mid.receiveShadow = true; group.add(mid);
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.8, 16, 16), whiteMat); head.position.y = 4.7; head.castShadow = true; head.receiveShadow = true; group.add(head);
+            group.userData.head = head;
+            const leftEye = createCuteEye(1.2); leftEye.position.set(-0.3, 4.9, 0.65); group.add(leftEye);
+            const rightEye = createCuteEye(1.2); rightEye.position.set(0.3, 4.9, 0.65); group.add(rightEye);
+            const nose = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.5, 8), new THREE.MeshStandardMaterial({color:0xff7700}));
+            nose.geometry.rotateX(Math.PI/2); nose.position.set(0, 4.7, 0.8); group.add(nose);
+            const armGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.6);
+            const lArm = new THREE.Mesh(armGeo, woodMat); lArm.position.set(-0.8, 3.4, 0); lArm.rotation.set(0, -0.2, Math.PI/4); group.add(lArm);
+            const rArm = new THREE.Mesh(armGeo, woodMat); rArm.position.set(0.8, 3.4, 0); rArm.rotation.set(0, 0.2, -Math.PI/4); group.add(rArm);
+            const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.15, 8, 20), redMat);
+            scarf.position.set(0, 3.9, 0); scarf.rotation.x = Math.PI/2; scarf.castShadow = true; group.add(scarf);
+            const scarfTail = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.8, 0.1), redMat);
+            scarfTail.position.set(0.4, 3.4, 0.6); scarfTail.rotation.set(0.2, 0, -0.2); group.add(scarfTail);
+            for(let i=0; i<3; i++){
+                const btn = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), blackMat);
+                btn.position.set(0, 3.5 - i*0.4, 1.05 - i*0.1); group.add(btn);
+            }
+            return group;
+        }
+
+        function createReindeer() {
+            const group = new THREE.Group();
+            const bodyMat = new THREE.MeshStandardMaterial({color:0xa0522d, flatShading:true});
+            const hoofMat = new THREE.MeshStandardMaterial({color:0x332211, flatShading:true});
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.2, 3), bodyMat); body.position.y = 1.8; body.castShadow = true; group.add(body);
+            const legGeo = new THREE.BoxGeometry(0.4, 1.5, 0.4);
+            const hoofGeo = new THREE.BoxGeometry(0.42, 0.3, 0.42);
+            [[-0.6, 1.2], [0.6, 1.2], [-0.6, -1.2], [0.6, -1.2]].forEach(p => {
+                const legGroup = new THREE.Group(); legGroup.position.set(p[0], -1, p[1]);
+                const l = new THREE.Mesh(legGeo, bodyMat); l.position.y = 0; l.castShadow=true; legGroup.add(l);
+                const h = new THREE.Mesh(hoofGeo, hoofMat); h.position.y = -0.75; h.castShadow=true; legGroup.add(h);
+                body.add(legGroup);
+            });
+            const tail = new THREE.Mesh(new THREE.SphereGeometry(0.3), whiteMat);
+            tail.position.set(0, 0.4, -1.5); body.add(tail);
+            group.userData.tail = tail;
+            const headGroup = new THREE.Group();
+            headGroup.position.set(0, 1.2, 2);
+            body.add(headGroup);
+            group.userData.head = headGroup;
+            const headMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1.5), bodyMat); headMesh.castShadow=true; headGroup.add(headMesh);
+            const nose = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshStandardMaterial({color:0xff2222})); nose.position.set(0, 0, 0.8); headGroup.add(nose);
+            const eyeL = createCuteEye(1.5); eyeL.position.set(-0.5, 0.1, 0.3); eyeL.rotation.y = -Math.PI/2; headGroup.add(eyeL);
+            const eyeR = createCuteEye(1.5); eyeR.position.set(0.5, 0.1, 0.3); eyeR.rotation.y = Math.PI/2; headGroup.add(eyeR);
+            const earGeo = new THREE.ConeGeometry(0.15, 0.6, 4);
+            const earL = new THREE.Mesh(earGeo, bodyMat); earL.position.set(-0.6, 0.3, -0.2); earL.rotation.set(0, 0, -0.5); headGroup.add(earL);
+            const earR = new THREE.Mesh(earGeo, bodyMat); earR.position.set(0.6, 0.3, -0.2); earR.rotation.set(0, 0, 0.5); headGroup.add(earR);
+            function createAntler(side) {
+                const antlerGrp = new THREE.Group();
+                const mainStem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 1.5), antlerMat); mainStem.position.y = 0.6; antlerGrp.add(mainStem);
+                const branch1 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.6), antlerMat); branch1.position.set(side * 0.2, 0.4, 0.2); branch1.rotation.z = side * -0.8; branch1.rotation.x = 0.5; antlerGrp.add(branch1);
+                const branch2 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5), antlerMat); branch2.position.set(side * 0.1, 0.9, -0.1); branch2.rotation.z = side * 0.6; antlerGrp.add(branch2);
+                return antlerGrp;
+            }
+            const antlerL = createAntler(-1); antlerL.position.set(-0.3, 0.5, -0.2); antlerL.rotation.z = -0.3; headGroup.add(antlerL);
+            const antlerR = createAntler(1); antlerR.position.set(0.3, 0.5, -0.2); antlerR.rotation.z = 0.3; headGroup.add(antlerR);
+            return group;
+        }
+
+        function createSanta() {
+            const group = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.SphereGeometry(1.8), redMat); body.position.y = 2.2; body.castShadow = true; group.add(body);
+            group.userData.body = body;
+            const belt = new THREE.Mesh(new THREE.CylinderGeometry(1.82, 1.82, 0.3, 32), blackMat); belt.position.y = 2.2; group.add(belt);
+            const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.2), goldMat); buckle.position.set(0, 2.2, 1.8); group.add(buckle);
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.9), skinMat); head.position.y = 4.2; head.castShadow = true; group.add(head);
+            group.userData.head = head;
+            const eyeL = createCuteEye(1.2); eyeL.position.set(-0.3, 0.1, 0.85); head.add(eyeL);
+            const eyeR = createCuteEye(1.2); eyeR.position.set(0.3, 0.1, 0.85); head.add(eyeR);
+            const nose = new THREE.Mesh(new THREE.SphereGeometry(0.15), new THREE.MeshStandardMaterial({color:0xffaaaa})); nose.position.set(0, 0, 0.95); head.add(nose);
+            const hat = new THREE.Mesh(new THREE.ConeGeometry(0.8, 1.5), redMat); hat.position.y = 5.6; group.add(hat);
+            const hatBall = new THREE.Mesh(new THREE.SphereGeometry(0.25), whiteMat); hatBall.position.y = 6.35; group.add(hatBall);
+            const hatRim = new THREE.Mesh(new THREE.TorusGeometry(0.8, 0.15, 16, 32), whiteMat); hatRim.position.y = 4.9; hatRim.rotation.x = Math.PI/2; group.add(hatRim);
+            const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 1.2), redMat);
+            const lArm = arm.clone(); lArm.position.set(-1.6, 2.8, 0); lArm.rotation.z = Math.PI / 3; group.add(lArm); lArm.add(new THREE.Mesh(new THREE.SphereGeometry(0.4), whiteMat).position.set(0, -0.7, 0));
+            const rArm = arm.clone(); rArm.position.set(1.6, 2.8, 0); rArm.rotation.z = -Math.PI / 3; group.add(rArm); rArm.add(new THREE.Mesh(new THREE.SphereGeometry(0.4), whiteMat).position.set(0, -0.7, 0));
+            const beard = new THREE.Group(); 
+            beard.add(new THREE.Mesh(new THREE.SphereGeometry(0.4), whiteMat).position.set(0, 3.7, 0.8));
+            beard.add(new THREE.Mesh(new THREE.SphereGeometry(0.4), whiteMat).position.set(-0.4, 3.8, 0.7));
+            beard.add(new THREE.Mesh(new THREE.SphereGeometry(0.4), whiteMat).position.set(0.4, 3.8, 0.7));
+            beard.add(new THREE.Mesh(new THREE.SphereGeometry(0.35), whiteMat).position.set(0, 3.4, 0.75));
+            const stacheGeo = new THREE.CapsuleGeometry(0.1, 0.5, 4, 8);
+            const stacheL = new THREE.Mesh(stacheGeo, whiteMat); stacheL.position.set(-0.25, 3.95, 0.9); stacheL.rotation.z = Math.PI/3; stacheL.rotation.x=0.5; beard.add(stacheL);
+            const stacheR = new THREE.Mesh(stacheGeo, whiteMat); stacheR.position.set(0.25, 3.95, 0.9); stacheR.rotation.z = -Math.PI/3; stacheR.rotation.x=0.5; beard.add(stacheR);
+            group.add(beard);
+            return group;
+        }
+
+        function createAurora() {
+            const geo = new THREE.PlaneGeometry(200, 100, 64, 64); geo.rotateX(-Math.PI/2);
+            const mat = new THREE.MeshBasicMaterial({color:0x00ffcc, transparent:true, opacity:0.4, blending:THREE.AdditiveBlending, side:THREE.DoubleSide, depthWrite:false});
+            const mesh = new THREE.Mesh(geo, mat); mesh.position.set(0, 30, -50); mesh.rotation.x = Math.PI/6;
+            mesh.userData.initialPositions = geo.attributes.position.array.slice();
+            return mesh;
+        }
+
+        function createCampfire() {
+            const group = new THREE.Group();
+            const logGeo = new THREE.CylinderGeometry(0.3, 0.3, 2.5, 6);
+            for(let i=0; i<5; i++) {
+                const log = new THREE.Mesh(logGeo, woodMat);
+                log.position.y = 0.2; log.rotation.x = Math.PI / 2; log.rotation.z = (i / 5) * Math.PI; log.castShadow = true; group.add(log);
+            }
+            const flameGeo = new THREE.ConeGeometry(0.8, 2, 8);
+            const flame1 = new THREE.Mesh(flameGeo, fireMat); flame1.position.y = 0.8; group.add(flame1);
+            const flame2 = new THREE.Mesh(flameGeo, fireMat); flame2.position.set(0.3, 0.6, 0); flame2.scale.set(0.7,0.7,0.7); group.add(flame2);
+            group.add(new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshBasicMaterial({color:0xffcc00})).position.set(0,0.4,0));
+            return group;
+        }
+
+        function createTurkey() {
+            const group = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.SphereGeometry(0.8,16,12).scale(1.2,0.8,1), turkeyMat); body.castShadow=true; group.add(body);
+            const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.1,0.8), turkeyMat); leg.position.set(-0.7,0.1,0.3); leg.rotation.set(-Math.PI/6,0,Math.PI/3); leg.castShadow=true; group.add(leg);
+            const leg2 = leg.clone(); leg2.position.set(-0.7,0.1,-0.3); leg2.rotation.set(Math.PI/6,0,Math.PI/3); group.add(leg2);
+            group.add(new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.1,0.1,16), whiteMat).position.set(0,-0.45,0));
+            return group;
+        }
+
+        function createElf(colorMat) {
+            const group = new THREE.Group(); const s = 0.6;
+            const body = new THREE.Mesh(new THREE.SphereGeometry(1.4*s), colorMat); body.position.y=1.2*s; body.castShadow=true; group.add(body);
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.8*s), skinMat); head.position.y=2.5*s; head.castShadow=true; group.add(head);
+            const hat = new THREE.Mesh(new THREE.ConeGeometry(0.7*s,1.8*s), colorMat); hat.position.y=3.6*s; group.add(hat);
+            const eL = new THREE.Mesh(new THREE.SphereGeometry(0.08*s), blackMat); eL.position.set(-0.2*s, 2.6*s, 0.75*s); group.add(eL);
+            const eR = new THREE.Mesh(new THREE.SphereGeometry(0.08*s), blackMat); eR.position.set(0.2*s, 2.6*s, 0.75*s); group.add(eR);
+            return group;
+        }
+
+        const animatedElves = []; 
+
+        function createDiningSet() {
+            const group = new THREE.Group();
+            const table = new THREE.Mesh(new THREE.BoxGeometry(6, 0.2, 3), darkWoodMat); table.position.y=1; table.castShadow=true; table.receiveShadow=true; group.add(table);
+            const leg = new THREE.Mesh(new THREE.BoxGeometry(0.2,1,0.2), darkWoodMat);
+            [[-2.8,1.4],[2.8,1.4],[-2.8,-1.4],[2.8,-1.4]].forEach(p=>{
+                const l=leg.clone(); l.position.set(p[0],0.5,p[1]); l.castShadow=true; group.add(l);
+            });
+            const chairPos = [{x:-1.5,z:-2.2,r:0},{x:0,z:-2.2,r:0},{x:1.5,z:-2.2,r:0},{x:-1.5,z:2.2,r:Math.PI},{x:0,z:2.2,r:Math.PI},{x:1.5,z:2.2,r:Math.PI}];
+            chairPos.forEach(p=>{
+                const seat = new THREE.Mesh(new THREE.BoxGeometry(1,0.1,1), darkWoodMat); seat.position.set(p.x,0.8,p.z); seat.rotation.y=p.r; seat.castShadow=true; group.add(seat);
+                const back = new THREE.Mesh(new THREE.BoxGeometry(1,1.2,0.1), darkWoodMat); back.position.set(0,0.6,-0.45); seat.add(back);
+                const elf = createElf(Math.random()>0.5 ? elfGreenMat : redMat);
+                elf.position.set(p.x, 0.85, p.z); elf.rotation.y = p.r + (Math.random()-0.5)*0.5;
+                elf.userData.baseY = 0.85; 
+                group.add(elf);
+                animatedElves.push(elf);
+            });
+            const turkey = createTurkey(); turkey.position.set(0,1.55,0); group.add(turkey);
+            return group;
+        }
+        
+        function createGifts() {
+            const grp = new THREE.Group();
+            const colors = [0xff2222, 0x22ff22, 0x2222ff, 0xffff22];
+            for(let i=0; i<12; i++) {
+                const w = 0.8 + Math.random() * 0.5;
+                const h = 0.8 + Math.random() * 0.4;
+                const boxColor = colors[i%4];
+                const boxGroup = new THREE.Group();
+                const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), new THREE.MeshStandardMaterial({color: boxColor, roughness:0.5}));
+                box.castShadow=true; box.receiveShadow=true; boxGroup.add(box);
+                const ribbonThickness = 0.15;
+                const ribbonX = new THREE.Mesh(new THREE.BoxGeometry(w + 0.02, h + 0.02, ribbonThickness), ribbonMat); boxGroup.add(ribbonX);
+                const ribbonZ = new THREE.Mesh(new THREE.BoxGeometry(ribbonThickness, h + 0.02, w + 0.02), ribbonMat); boxGroup.add(ribbonZ);
+                const bowGroup = new THREE.Group();
+                const bowCenter = new THREE.Mesh(new THREE.SphereGeometry(ribbonThickness*0.8), ribbonMat); bowGroup.add(bowCenter);
+                const bowL = new THREE.Mesh(new THREE.SphereGeometry(ribbonThickness), ribbonMat); bowL.position.set(-ribbonThickness, 0, 0); bowGroup.add(bowL);
+                const bowR = new THREE.Mesh(new THREE.SphereGeometry(ribbonThickness), ribbonMat); bowR.position.set(ribbonThickness, 0, 0); bowGroup.add(bowR);
+                bowGroup.position.y = h/2 + ribbonThickness/2;
+                boxGroup.add(bowGroup);
+                boxGroup.position.set((Math.random()-0.5)*12, h/2, -10 + (Math.random()-0.5)*6);
+                boxGroup.rotation.y = Math.random() * Math.PI;
+                grp.add(boxGroup);
+            }
+            return grp;
+        }
+
+        // --- 4. 场景组装 ---
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200), new THREE.MeshStandardMaterial({color:0x151525, roughness:0.8}));
+        ground.rotation.x = -Math.PI/2; ground.position.y = -1.2; ground.receiveShadow = true;
+        scene.add(ground);
+
+        const campfire = createCampfire(); campfire.position.set(0,-1.2,0); scene.add(campfire);
+        const diningSet = createDiningSet(); diningSet.position.set(0,-1.2,6); scene.add(diningSet);
+        const tree = createChristmasTree(); tree.position.set(0,0,-12); scene.add(tree);
+        
+        const santa = createSanta(); santa.position.set(5,-1.2,4); santa.rotation.y=-Math.PI/4; scene.add(santa);
+        const snowman = createSnowman(); snowman.position.set(-6,-1.2,2); snowman.rotation.y=Math.PI/3; scene.add(snowman);
+        const reindeer = createReindeer(); reindeer.position.set(8,-1.2,-5); reindeer.rotation.y=-Math.PI/1.5; scene.add(reindeer);
+        
+        const gifts = createGifts(); scene.add(gifts);
+        const aurora = createAurora(); scene.add(aurora);
+
+        const snowGeo = new THREE.BufferGeometry();
+        const snowPos = new Float32Array(2000*3);
+        const snowVel = new Float32Array(2000);
+        for(let i=0; i<6000; i+=3) {
+            snowPos[i] = (Math.random()-0.5)*100; snowPos[i+1] = Math.random()*60; snowPos[i+2] = (Math.random()-0.5)*100;
+            snowVel[i/3] = Math.random()*0.06 + 0.03;
+        }
+        snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPos,3));
+        const snow = new THREE.Points(snowGeo, new THREE.PointsMaterial({size:0.2, color:0xffffff, transparent:true, opacity:0.9}));
+        scene.add(snow);
+
+        // --- 5. 动画 ---
+        let time = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+            time += 0.01;
+            
+            fireLight.intensity = fireLight.userData.baseIntensity + (Math.random()-0.5)*2;
+
+            santa.userData.body.scale.set(1, 1 + Math.sin(time * 2) * 0.015, 1);
+            santa.userData.head.rotation.x = Math.sin(time * 1.5) * 0.05;
+            santa.rotation.y = -Math.PI/4 + Math.sin(time * 0.8) * 0.03;
+
+            snowman.rotation.z = Math.sin(time * 1.2) * 0.03;
+            snowman.userData.head.rotation.y = Math.sin(time * 2.5) * 0.04;
+
+            reindeer.userData.head.rotation.x = Math.sin(time * 0.7) * 0.15;
+            reindeer.userData.tail.rotation.y = Math.sin(time * 6) * 0.2 * (Math.sin(time*0.5)>0.8 ? 1 : 0);
+
+            animatedElves.forEach((elf, index) => {
+                elf.position.y = elf.userData.baseY + Math.sin(time * 3 + index) * 0.015;
+            });
+            
+            tree.rotation.y += 0.001;
+
+            const pos = aurora.geometry.attributes.position.array;
+            const init = aurora.userData.initialPositions;
+            for(let i=0; i<pos.length; i+=3) {
+                pos[i+1] = init[i+1] + Math.sin(init[i]/10 + time)*5;
+            }
+            aurora.geometry.attributes.position.needsUpdate = true;
+
+            const sp = snow.geometry.attributes.position.array;
+            for(let i=1; i<6000; i+=3) {
+                sp[i] -= snowVel[(i-1)/3];
+                if(sp[i]<-1) sp[i]=50;
+            }
+            snow.geometry.attributes.position.needsUpdate = true;
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
